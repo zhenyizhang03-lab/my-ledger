@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ledger-v4';
+const CACHE_NAME = 'ledger-v5';
 const BASE_PATH = new URL('./', self.location.href).pathname;
 const CORE_ASSETS = [BASE_PATH, `${BASE_PATH}manifest.webmanifest`, `${BASE_PATH}icon.svg`];
 
