@@ -1,0 +1,18 @@
+{
+  "name": "橘账 · 本地记账",
+  "short_name": "橘账",
+  "description": "一个只记录支出的轻量本地记账工具",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#121414",
+  "theme_color": "#121414",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
