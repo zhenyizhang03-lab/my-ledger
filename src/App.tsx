@@ -186,6 +186,14 @@ function PlusIcon(props: IconProps) {
   return <IconBase {...props}><path d="M12 5v14M5 12h14" /></IconBase>;
 }
 
+function TrashIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7h16M9 3h6l1 4H8l1-4ZM6.5 7l.8 14h9.4l.8-14M10 11v6M14 11v6" />
+    </IconBase>
+  );
+}
+
 function TransportIcon(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -416,7 +424,131 @@ function SegmentedControl({ value, onChange }: { value: HomeTab; onChange: (valu
   );
 }
 
-function ExpenseList({ records }: { records: ExpenseRecord[] }) {
+function EditableExpenseRow({
+  record,
+  onUpdate,
+  onEditCategory,
+  onDelete,
+}: {
+  record: ExpenseRecord;
+  onUpdate: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
+  onEditCategory: (id: string) => void;
+  onDelete: (record: ExpenseRecord) => void;
+}) {
+  const category = CATEGORY_META[record.category];
+  const [editingField, setEditingField] = useState<'amount' | 'note' | null>(null);
+  const [amountDraft, setAmountDraft] = useState(formatMoney(record.amount));
+  const [noteDraft, setNoteDraft] = useState(record.note || category.label);
+
+  function beginAmountEdit() {
+    setAmountDraft(record.amount.toFixed(2));
+    setEditingField('amount');
+  }
+
+  function saveAmount() {
+    const nextAmount = Number(amountDraft);
+    setEditingField(null);
+    if (Number.isFinite(nextAmount) && nextAmount > 0 && nextAmount !== record.amount) {
+      onUpdate(record.id, { amount: nextAmount });
+    }
+  }
+
+  function beginNoteEdit() {
+    setNoteDraft(record.note || category.label);
+    setEditingField('note');
+  }
+
+  function saveNote() {
+    const trimmed = noteDraft.trim();
+    const nextNote = trimmed === category.label ? '' : trimmed;
+    setEditingField(null);
+    if (nextNote !== record.note) {
+      onUpdate(record.id, { note: nextNote });
+    }
+  }
+
+  return (
+    <article className="expense-row">
+      <button
+        className="expense-row__category"
+        onClick={() => onEditCategory(record.id)}
+        aria-label={`修改${category.label}分类`}
+        type="button"
+      >
+        <CategoryBadge category={record.category} />
+      </button>
+
+      {editingField === 'note' ? (
+        <input
+          autoFocus
+          aria-label="修改记录文字"
+          className="expense-row__text-input"
+          maxLength={80}
+          value={noteDraft}
+          onBlur={saveNote}
+          onFocus={(event) => event.currentTarget.select()}
+          onChange={(event) => setNoteDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur();
+            if (event.key === 'Escape') setEditingField(null);
+          }}
+        />
+      ) : (
+        <button className="expense-row__content" onClick={beginNoteEdit} type="button">
+          <strong>{record.note || category.label}</strong>
+        </button>
+      )}
+
+      {editingField === 'amount' ? (
+        <label className="expense-row__amount-input-wrap">
+          <span>− ¥</span>
+          <input
+            autoFocus
+            aria-label="修改金额"
+            inputMode="decimal"
+            maxLength={10}
+            value={amountDraft}
+            onBlur={saveAmount}
+            onFocus={(event) => event.currentTarget.select()}
+            onChange={(event) => {
+              const next = event.target.value.replace(/[^\d.]/g, '');
+              if (/^\d{0,7}(\.\d{0,2})?$/.test(next)) setAmountDraft(next);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+              if (event.key === 'Escape') setEditingField(null);
+            }}
+          />
+        </label>
+      ) : (
+        <button className="expense-row__amount" onClick={beginAmountEdit} type="button">
+          <strong>− ¥ {formatMoney(record.amount)}</strong>
+        </button>
+      )}
+
+      <button
+        className="expense-row__delete"
+        onClick={() => onDelete(record)}
+        aria-label={`删除${record.note || category.label}`}
+        type="button"
+      >
+        <TrashIcon size={18} strokeWidth={1.45} />
+      </button>
+    </article>
+  );
+}
+
+function ExpenseList({
+  records,
+  onUpdate,
+  onEditCategory,
+  onDelete,
+}: {
+  records: ExpenseRecord[];
+  onUpdate: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
+  onEditCategory: (id: string) => void;
+  onDelete: (record: ExpenseRecord) => void;
+}) {
   const groups = useMemo(() => {
     const byDate = new Map<string, ExpenseRecord[]>();
     [...records]
@@ -443,20 +575,15 @@ function ExpenseList({ records }: { records: ExpenseRecord[] }) {
       {groups.map(([date, dateRecords]) => (
         <section className="expense-group" key={date}>
           <h2>{formatRecordDay(date)}</h2>
-          {dateRecords.map((record) => {
-            const category = CATEGORY_META[record.category];
-            return (
-              <article className="expense-row" key={record.id}>
-                <CategoryBadge category={record.category} />
-                <div className="expense-row__content">
-                  <strong>{record.note || category.label}</strong>
-                </div>
-                <div className="expense-row__amount">
-                  <strong>− ¥ {formatMoney(record.amount)}</strong>
-                </div>
-              </article>
-            );
-          })}
+          {dateRecords.map((record) => (
+            <EditableExpenseRow
+              key={record.id}
+              record={record}
+              onUpdate={onUpdate}
+              onEditCategory={onEditCategory}
+              onDelete={onDelete}
+            />
+          ))}
         </section>
       ))}
     </div>
@@ -613,6 +740,9 @@ function HomeScreen({
   onTabChange,
   onMonthChange,
   onAdd,
+  onUpdateRecord,
+  onEditCategory,
+  onDeleteRecord,
 }: {
   month: string;
   records: ExpenseRecord[];
@@ -620,6 +750,9 @@ function HomeScreen({
   onTabChange: (tab: HomeTab) => void;
   onMonthChange: (month: string) => void;
   onAdd: () => void;
+  onUpdateRecord: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
+  onEditCategory: (id: string) => void;
+  onDeleteRecord: (record: ExpenseRecord) => void;
 }) {
   const monthRecords = records.filter((record) => record.occurredAt.slice(0, 7) === month);
   const total = monthRecords.reduce((sum, record) => sum + record.amount, 0);
@@ -628,13 +761,20 @@ function HomeScreen({
     <main className="screen home-screen">
       <MonthHeader month={month} value={homeTab} onTabChange={onTabChange} onMonthChange={onMonthChange} />
       {homeTab === 'details' ? (
-        <section className="detail-panel">
-          <div className="total-block" aria-live="polite">
-            <p>本月总开支</p>
-            <strong><span>¥</span>{formatMoney(total)}</strong>
-          </div>
-          <ExpenseList records={monthRecords} />
-        </section>
+        <>
+          <section className="detail-panel">
+            <div className="total-block" aria-live="polite">
+              <p>本月总开支</p>
+              <strong><span>¥</span>{formatMoney(total)}</strong>
+            </div>
+          </section>
+          <ExpenseList
+            records={monthRecords}
+            onUpdate={onUpdateRecord}
+            onEditCategory={onEditCategory}
+            onDelete={onDeleteRecord}
+          />
+        </>
       ) : (
         <ChartStatistics records={records} month={month} />
       )}
@@ -645,12 +785,20 @@ function HomeScreen({
   );
 }
 
-function CategoryScreen({ onBack, onSelect }: { onBack: () => void; onSelect: (key: CategoryKey) => void }) {
+function CategoryScreen({
+  title = '选择支出大类',
+  onBack,
+  onSelect,
+}: {
+  title?: string;
+  onBack: () => void;
+  onSelect: (key: CategoryKey) => void;
+}) {
   return (
     <main className="screen sub-screen category-screen">
       <header className="sub-header">
         <button className="icon-button" onClick={onBack} aria-label="返回" type="button"><ChevronLeftIcon /></button>
-        <h1>选择支出大类</h1>
+        <h1>{title}</h1>
         <span className="header-spacer" />
       </header>
       <div className="category-grid">
@@ -755,23 +903,94 @@ function EntryScreen({
   );
 }
 
+function DeleteRecordDialog({
+  record,
+  onCancel,
+  onConfirm,
+}: {
+  record: ExpenseRecord;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const title = record.note || CATEGORY_META[record.category].label;
+
+  return (
+    <div className="delete-dialog-backdrop" role="presentation" onClick={onCancel}>
+      <section
+        aria-labelledby="delete-dialog-title"
+        aria-modal="true"
+        className="delete-dialog"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="delete-dialog__icon"><TrashIcon size={22} strokeWidth={1.5} /></span>
+        <h2 id="delete-dialog-title">删除这条记录？</h2>
+        <p>{title} · ¥ {formatMoney(record.amount)}</p>
+        <div className="delete-dialog__actions">
+          <button onClick={onCancel} type="button">取消</button>
+          <button className="is-danger" onClick={onConfirm} type="button">删除</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [homeTab, setHomeTab] = useState<HomeTab>('details');
   const [selectedMonth, setSelectedMonth] = useState(getLocalMonth());
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('food');
   const [records, setRecords] = useState<ExpenseRecord[]>(loadExpenses);
-  const [showSaved, setShowSaved] = useState(false);
+  const [categoryEditId, setCategoryEditId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ExpenseRecord | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
   }, [records]);
 
   useEffect(() => {
-    if (!showSaved) return;
-    const timer = window.setTimeout(() => setShowSaved(false), 1700);
+    if (!toastMessage) return;
+    const timer = window.setTimeout(() => setToastMessage(null), 1700);
     return () => window.clearTimeout(timer);
-  }, [showSaved]);
+  }, [toastMessage]);
+
+  function updateRecord(
+    id: string,
+    changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>,
+  ) {
+    setRecords((current) => current.map((record) => (
+      record.id === id ? { ...record, ...changes } : record
+    )));
+    setToastMessage('已保存修改');
+  }
+
+  function beginCategoryEdit(id: string) {
+    setCategoryEditId(id);
+    setScreen('categories');
+  }
+
+  function selectCategory(category: CategoryKey) {
+    if (categoryEditId) {
+      setRecords((current) => current.map((record) => (
+        record.id === categoryEditId ? { ...record, category } : record
+      )));
+      setCategoryEditId(null);
+      setScreen('home');
+      setToastMessage('已保存修改');
+      return;
+    }
+
+    setSelectedCategory(category);
+    setScreen('entry');
+  }
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    setRecords((current) => current.filter((record) => record.id !== pendingDelete.id));
+    setPendingDelete(null);
+    setToastMessage('已删除记录');
+  }
 
   function completeEntry(amount: number, note: string, date: string) {
     const now = new Date();
@@ -787,7 +1006,7 @@ function App() {
     setSelectedMonth(date.slice(0, 7));
     setHomeTab('details');
     setScreen('home');
-    setShowSaved(true);
+    setToastMessage('已记录这笔支出');
   }
 
   return (
@@ -797,19 +1016,26 @@ function App() {
           <HomeScreen
             homeTab={homeTab}
             month={selectedMonth}
-            onAdd={() => setScreen('categories')}
+            onAdd={() => {
+              setCategoryEditId(null);
+              setScreen('categories');
+            }}
+            onDeleteRecord={setPendingDelete}
+            onEditCategory={beginCategoryEdit}
             onMonthChange={(month) => month && setSelectedMonth(month)}
             onTabChange={setHomeTab}
+            onUpdateRecord={updateRecord}
             records={records}
           />
         )}
         {screen === 'categories' && (
           <CategoryScreen
-            onBack={() => setScreen('home')}
-            onSelect={(category) => {
-              setSelectedCategory(category);
-              setScreen('entry');
+            title={categoryEditId ? '修改支出大类' : '选择支出大类'}
+            onBack={() => {
+              setCategoryEditId(null);
+              setScreen('home');
             }}
+            onSelect={selectCategory}
           />
         )}
         {screen === 'entry' && (
@@ -820,7 +1046,16 @@ function App() {
             onComplete={completeEntry}
           />
         )}
-        <div className={`toast ${showSaved ? 'is-visible' : ''}`} role="status">已记录这笔支出</div>
+        {pendingDelete && (
+          <DeleteRecordDialog
+            record={pendingDelete}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={confirmDelete}
+          />
+        )}
+        <div className={`toast ${toastMessage ? 'is-visible' : ''}`} role="status">
+          {toastMessage}
+        </div>
       </div>
     </div>
   );
