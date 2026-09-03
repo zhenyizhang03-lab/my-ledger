@@ -1,6 +1,12 @@
-const CACHE_NAME = 'ledger-v5';
+const CACHE_NAME = 'ledger-v6';
 const BASE_PATH = new URL('./', self.location.href).pathname;
-const CORE_ASSETS = [BASE_PATH, `${BASE_PATH}manifest.webmanifest`, `${BASE_PATH}icon.svg`];
+const CORE_ASSETS = [
+  BASE_PATH,
+  `${BASE_PATH}manifest.webmanifest`,
+  `${BASE_PATH}icon-192.png`,
+  `${BASE_PATH}icon-512.png`,
+  `${BASE_PATH}apple-touch-icon.png`,
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)));
