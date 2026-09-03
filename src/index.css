@@ -320,19 +320,47 @@ label:has(input:focus-visible) {
   font-weight: 570;
 }
 
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+}
+
+.swipe-row__delete {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: 52px;
+  padding: 0;
+  place-items: center;
+  background: #ff5f72;
+  color: #171717;
+}
+
 .expense-row {
+  position: relative;
+  z-index: 1;
   display: grid;
   min-height: 66px;
-  grid-template-columns: 40px minmax(0, 1fr) auto 32px;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
-  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  touch-action: pan-y;
+  user-select: none;
+  transition: transform 190ms cubic-bezier(0.22, 0.78, 0.3, 1);
+}
+
+.expense-row.is-dragging {
+  transition: none;
 }
 
 .expense-row__category,
 .expense-row__content,
-.expense-row__amount,
-.expense-row__delete {
+.expense-row__amount {
   border: 0;
   background: transparent;
   color: inherit;
@@ -429,22 +457,6 @@ label:has(input:focus-visible) {
   font-size: 14px;
   font-weight: 680;
   text-align: right;
-}
-
-.expense-row__delete {
-  display: grid;
-  width: 32px;
-  height: 42px;
-  padding: 0;
-  place-items: center;
-  border-radius: 8px;
-  color: #8b8d90;
-  transition: color 140ms ease, background 140ms ease;
-}
-
-.expense-row__delete:active {
-  background: rgba(255, 95, 114, 0.12);
-  color: #ff6f80;
 }
 
 .category-grid {
@@ -794,72 +806,6 @@ label:has(input:focus-visible) {
   font-weight: 680;
 }
 
-.delete-dialog-backdrop {
-  position: fixed;
-  z-index: 40;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 20px;
-  padding-bottom: max(20px, env(safe-area-inset-bottom));
-  background: rgba(0, 0, 0, 0.68);
-  animation: dialog-backdrop-in 160ms ease-out both;
-}
-
-.delete-dialog {
-  width: min(100%, 390px);
-  border: 1px solid #3b3d3e;
-  border-radius: 18px;
-  background: #242627;
-  padding: 22px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
-  text-align: center;
-}
-
-.delete-dialog__icon {
-  display: grid;
-  width: 46px;
-  height: 46px;
-  margin: 0 auto 14px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255, 95, 114, 0.12);
-  color: #ff6f80;
-}
-
-.delete-dialog h2 {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 730;
-}
-
-.delete-dialog p {
-  margin: 8px 0 20px;
-  color: var(--secondary);
-  font-size: 14px;
-}
-
-.delete-dialog__actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.delete-dialog__actions button {
-  min-height: 48px;
-  border-radius: 10px;
-  background: #333536;
-  color: white;
-  font-size: 15px;
-  font-weight: 680;
-}
-
-.delete-dialog__actions button.is-danger {
-  background: #ff5f72;
-  color: #171717;
-}
-
 .toast {
   position: fixed;
   z-index: 20;
@@ -883,11 +829,6 @@ label:has(input:focus-visible) {
 }
 
 @keyframes screen-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes dialog-backdrop-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }

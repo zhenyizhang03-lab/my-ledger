@@ -433,12 +433,72 @@ function EditableExpenseRow({
   record: ExpenseRecord;
   onUpdate: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
   onEditCategory: (id: string) => void;
-  onDelete: (record: ExpenseRecord) => void;
+  onDelete: (id: string) => void;
 }) {
+  const deleteRevealWidth = 52;
   const category = CATEGORY_META[record.category];
   const [editingField, setEditingField] = useState<'amount' | 'note' | null>(null);
   const [amountDraft, setAmountDraft] = useState(formatMoney(record.amount));
   const [noteDraft, setNoteDraft] = useState(record.note || category.label);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const swipeOffsetRef = useRef(0);
+  const pointerStartRef = useRef<{ x: number; y: number; offset: number } | null>(null);
+  const isDraggingRef = useRef(false);
+  const suppressClickRef = useRef(false);
+
+  function applySwipeOffset(offset: number) {
+    swipeOffsetRef.current = offset;
+    setSwipeOffset(offset);
+  }
+
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (editingField) return;
+    pointerStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      offset: swipeOffsetRef.current,
+    };
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const start = pointerStartRef.current;
+    if (!start) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+
+    if (!isDraggingRef.current && Math.abs(deltaX) < 6) return;
+    if (!isDraggingRef.current && Math.abs(deltaY) > Math.abs(deltaX)) {
+      pointerStartRef.current = null;
+      return;
+    }
+
+    isDraggingRef.current = true;
+    setIsDragging(true);
+    const nextOffset = Math.min(deleteRevealWidth, Math.max(0, start.offset - deltaX));
+    applySwipeOffset(nextOffset);
+  }
+
+  function finishSwipe() {
+    if (!pointerStartRef.current) return;
+    const shouldOpen = swipeOffsetRef.current > deleteRevealWidth * 0.42;
+    applySwipeOffset(shouldOpen ? deleteRevealWidth : 0);
+    pointerStartRef.current = null;
+    if (isDraggingRef.current) {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+    isDraggingRef.current = false;
+    setIsDragging(false);
+  }
 
   function beginAmountEdit() {
     setAmountDraft(record.amount.toFixed(2));
@@ -468,15 +528,43 @@ function EditableExpenseRow({
   }
 
   return (
-    <article className="expense-row">
+    <article className="swipe-row">
       <button
-        className="expense-row__category"
-        onClick={() => onEditCategory(record.id)}
-        aria-label={`修改${category.label}分类`}
+        className="swipe-row__delete"
+        onClick={() => onDelete(record.id)}
+        aria-label={`删除${record.note || category.label}`}
         type="button"
       >
-        <CategoryBadge category={record.category} />
+        <TrashIcon size={21} strokeWidth={1.5} />
       </button>
+      <div
+        className={`expense-row ${isDragging ? 'is-dragging' : ''}`}
+        style={{ transform: `translateX(-${swipeOffset}px)` }}
+        onClickCapture={(event) => {
+          if (suppressClickRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          if (swipeOffsetRef.current > 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            applySwipeOffset(0);
+          }
+        }}
+        onPointerCancel={finishSwipe}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishSwipe}
+      >
+        <button
+          className="expense-row__category"
+          onClick={() => onEditCategory(record.id)}
+          aria-label={`修改${category.label}分类`}
+          type="button"
+        >
+          <CategoryBadge category={record.category} />
+        </button>
 
       {editingField === 'note' ? (
         <input
@@ -526,14 +614,7 @@ function EditableExpenseRow({
         </button>
       )}
 
-      <button
-        className="expense-row__delete"
-        onClick={() => onDelete(record)}
-        aria-label={`删除${record.note || category.label}`}
-        type="button"
-      >
-        <TrashIcon size={18} strokeWidth={1.45} />
-      </button>
+      </div>
     </article>
   );
 }
@@ -547,7 +628,7 @@ function ExpenseList({
   records: ExpenseRecord[];
   onUpdate: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
   onEditCategory: (id: string) => void;
-  onDelete: (record: ExpenseRecord) => void;
+  onDelete: (id: string) => void;
 }) {
   const groups = useMemo(() => {
     const byDate = new Map<string, ExpenseRecord[]>();
@@ -680,7 +761,7 @@ function ChartStatistics({ records, month }: { records: ExpenseRecord[]; month: 
   const conicSegments = categories.map((item) => {
     const start = cursor;
     cursor += (item.amount / Math.max(total, 1)) * 100;
-    return `${CATEGORY_META[item.key].color} ${start}% ${cursor}%`;
+    return `${CATEGORY_META[item.key].background} ${start}% ${cursor}%`;
   });
 
   return (
@@ -719,7 +800,7 @@ function ChartStatistics({ records, month }: { records: ExpenseRecord[]; month: 
               <div className="chart-legend">
                 {categories.map((item) => (
                   <div className="legend-row" key={item.key}>
-                    <i style={{ backgroundColor: CATEGORY_META[item.key].color }} />
+                    <i style={{ backgroundColor: CATEGORY_META[item.key].background }} />
                     <span>{CATEGORY_META[item.key].label}</span>
                     <strong>{((item.amount / total) * 100).toFixed(1)}%</strong>
                   </div>
@@ -752,7 +833,7 @@ function HomeScreen({
   onAdd: () => void;
   onUpdateRecord: (id: string, changes: Partial<Pick<ExpenseRecord, 'amount' | 'note'>>) => void;
   onEditCategory: (id: string) => void;
-  onDeleteRecord: (record: ExpenseRecord) => void;
+  onDeleteRecord: (id: string) => void;
 }) {
   const monthRecords = records.filter((record) => record.occurredAt.slice(0, 7) === month);
   const total = monthRecords.reduce((sum, record) => sum + record.amount, 0);
@@ -903,38 +984,6 @@ function EntryScreen({
   );
 }
 
-function DeleteRecordDialog({
-  record,
-  onCancel,
-  onConfirm,
-}: {
-  record: ExpenseRecord;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const title = record.note || CATEGORY_META[record.category].label;
-
-  return (
-    <div className="delete-dialog-backdrop" role="presentation" onClick={onCancel}>
-      <section
-        aria-labelledby="delete-dialog-title"
-        aria-modal="true"
-        className="delete-dialog"
-        role="dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="delete-dialog__icon"><TrashIcon size={22} strokeWidth={1.5} /></span>
-        <h2 id="delete-dialog-title">删除这条记录？</h2>
-        <p>{title} · ¥ {formatMoney(record.amount)}</p>
-        <div className="delete-dialog__actions">
-          <button onClick={onCancel} type="button">取消</button>
-          <button className="is-danger" onClick={onConfirm} type="button">删除</button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [homeTab, setHomeTab] = useState<HomeTab>('details');
@@ -942,7 +991,6 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('food');
   const [records, setRecords] = useState<ExpenseRecord[]>(loadExpenses);
   const [categoryEditId, setCategoryEditId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<ExpenseRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -985,10 +1033,8 @@ function App() {
     setScreen('entry');
   }
 
-  function confirmDelete() {
-    if (!pendingDelete) return;
-    setRecords((current) => current.filter((record) => record.id !== pendingDelete.id));
-    setPendingDelete(null);
+  function deleteRecord(id: string) {
+    setRecords((current) => current.filter((record) => record.id !== id));
     setToastMessage('已删除记录');
   }
 
@@ -1020,7 +1066,7 @@ function App() {
               setCategoryEditId(null);
               setScreen('categories');
             }}
-            onDeleteRecord={setPendingDelete}
+            onDeleteRecord={deleteRecord}
             onEditCategory={beginCategoryEdit}
             onMonthChange={(month) => month && setSelectedMonth(month)}
             onTabChange={setHomeTab}
@@ -1044,13 +1090,6 @@ function App() {
             onBack={() => setScreen('categories')}
             onChangeCategory={() => setScreen('categories')}
             onComplete={completeEntry}
-          />
-        )}
-        {pendingDelete && (
-          <DeleteRecordDialog
-            record={pendingDelete}
-            onCancel={() => setPendingDelete(null)}
-            onConfirm={confirmDelete}
           />
         )}
         <div className={`toast ${toastMessage ? 'is-visible' : ''}`} role="status">
